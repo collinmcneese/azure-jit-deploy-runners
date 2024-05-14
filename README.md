@@ -1,8 +1,8 @@
-# Azure JIT Deploy Runners
+# azure-oidc-workflows
 
-This repository contains reusable GitHub Actions workflows for managing Just-In-Time (JIT) GitHub Actions runners in Azure. The workflows authenticate with Azure using OIDC, and provide the ability to create and delete JIT runners.
+This repository contains reusable GitHub Actions workflows for managing Just-In-Time (JIT) runners in Azure. The workflows authenticate with Azure using OIDC, and provide the ability to create and delete JIT runners.
 
-- [Azure JIT Deploy Runners](#azure-jit-deploy-runners)
+- [azure-oidc-workflows](#azure-oidc-workflows)
   - [reusable-create-jit-runner.yml](#reusable-create-jit-runneryml)
     - [Inputs, Secrets, and Outputs - reusable-create-jit-runner.yml](#inputs-secrets-and-outputs---reusable-create-jit-runneryml)
     - [Dependencies - reusable-create-jit-runner.yml](#dependencies---reusable-create-jit-runneryml)
@@ -86,7 +86,7 @@ For example:
 ```yaml
 jobs:
   create-jit-runner:
-    uses: clever-org-name/azure-oidc-workflows/.github/workflows/reusable-create-jit-runner.yml@main
+    uses: {owner}/{repository}/.github/workflows/reusable-create-jit-runner.yml@main
     with:
       runner_group: 'my-runner-group-name'
       runner_type: 'container'
@@ -157,7 +157,7 @@ For example:
 ```yaml
 jobs:
   delete-jit-runner:
-    uses: clever-org-name/azure-oidc-workflows/.github/workflows/reusable-delete-jit-runner.yml@main
+    uses: {owner}/{repository}/.github/workflows/reusable-delete-jit-runner.yml@main
     with:
       runner_name: 'my-runner001'
       runner_resource_group: 'my-resource-group-name'
@@ -188,7 +188,7 @@ jobs:
       runner_name_prefix: 'my-runner001'
       runner_count: 1
       runner_type: 'container'
-      runner_image: 'ghcr.io/actions/runner:latest'
+      runner_image: 'ghcr.io/collinmcneese/runner-no-dind:latest'
       runner_resource_group: 'my-resource-group-name'
       runner_vnet: 'my-vnet-name'
       runner_location: 'eastus'
@@ -201,6 +201,7 @@ jobs:
       az_tenant_id: ${{ secrets.AZURE_TENANT_ID }}
 
   deploy:
+    name: Run Deployment
     runs-on: ${{ steps.create-jit-runner.outputs.runner_group }}
     environment: 'my-environment'
     steps:
