@@ -1,0 +1,168 @@
+name: Create JIT Runner
+
+permissions:
+  id-token: write
+  contents: read
+
+on:
+  workflow_call:
+    inputs:
+      environment:
+        description: 'The GitHub environment to use for deployment'
+        required: false
+        type: string
+      runner_name_prefix:
+        description: 'The name of the JIT runner to create'
+        required: true
+        type: string
+      runner_group:
+        description: 'The group of JIT runners to create'
+        required: true
+        type: string
+      runner_type:
+        description: 'The type of the JIT runner to create'
+        required: false
+        default: 'ubuntu-latest'
+        type: string
+      runner_labels:
+        description: 'The labels to apply to the JIT runner'
+        required: false
+        default: 'self-hosted'
+        type: string
+      runner_resource_group:
+        description: 'The resource group to create the JIT runner in'
+        required: true
+        type: string
+      runner_vnet:
+        description: 'The VNET to create the JIT runner in'
+        required: false
+        default: ''
+        type: string
+      runner_subnet:
+        description: 'The subnet to create the JIT runner in'
+        required: false
+        default: 'default'
+        type: string
+      runner_image:
+        description: 'The image to use for the JIT runner'
+        required: true
+        type: string
+      runner_location:
+        description: 'The location to create the JIT runner in'
+        required: true
+        type: string
+      runner_count:
+        description: 'The number of JIT runners to create'
+        required: false
+        default: '1'
+        type: string
+
+    secrets:
+      az_subscription_id:
+        description: 'The Azure subscription ID'
+        required: true
+      az_tenant_id:
+        description: 'The Azure tenant ID'
+        required: true
+      az_client_id:
+        description: 'The Azure client ID'
+        required: true
+
+    outputs:
+      runner-details-container:
+        description: 'The details of the container JIT runner(s) created'
+        value: ${{ jobs.create-jit-runner.outputs.runner-details-container }}
+
+jobs:
+  create-jit-runner:
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    outputs:
+      runner-details-container: ${{ steps.create-jit-runner-container.outputs.result }}
+    steps:
+      - name: 'Az CLI login'
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.az_client_id }}
+          tenant-id: ${{ secrets.az_tenant_id }}
+          subscription-id: ${{ secrets.az_subscription_id }}
+
+        # Make sure that the apppem is a multiline secret set with --file so that it has \n characters
+        # Make sure to set VAULT_NAME to the name of the Key Vault which is in use
+      - name: fetch credentials from AKV
+        id: fetch-credentials
+        env:
+          VAULT_NAME: 'runner-vault'
+        run: |
+          appid="$(az keyvault secret show --vault-name $VAULT_NAME --name 'runner-app-id' --query 'value' | tr -d '\"')"
+          apppem="$(az keyvault secret show --vault-name  $VAULT_NAME --name 'runner-app-pem' --query 'value' | tr -d '\"')"
+
+          echo "appid=${appid}" >> "$GITHUB_OUTPUT"
+
+          echo "::add-mask::${apppem}"
+          echo "apppem<<ENDOFPEM" >> $GITHUB_OUTPUT
+          echo "${apppem}" >> $GITHUB_OUTPUT
+          echo "ENDOFPEM" >> $GITHUB_OUTPUT
+
+      # Generate a GitHub App token
+      - uses: actions/create-github-app-token@v1
+        id: app-token
+        with:
+          app-id: ${{ steps.fetch-credentials.outputs.appid }}
+          private-key: "${{ steps.fetch-credentials.outputs.apppem }}"
+          owner: ${{ github.repository_owner }}
+
+      # Generate a runner registration token using the API
+      - name: Generate runner registration token
+        id: runner-token
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ steps.app-token.outputs.token }}
+          script: |
+            const response = await github.request('POST /orgs/{org}/actions/runners/registration-token', {
+              org: context.payload.repository.owner.login
+            });
+            core.setSecret(response.data.token);
+            return response.data.token;
+
+      # The script components in this step have some environment variables which are specific
+      # to the image being used in local testing and should be updated to reflect the Actions Runner image that is being used
+      - name: Create JIT runner (container)
+        if: ${{ inputs.runner_type == 'container' }}
+        id: create-jit-runner-container
+        run: |
+            declare -a result
+            count=${{ inputs.runner_count }}
+            vnet="${{ inputs.runner_vnet }}"
+            subnet="${{ inputs.runner_subnet }}"
+
+            for ((i=0; i<count; i++)); do
+              set -e
+              echo "Creating container JIT runner ${{ inputs.runner_name_prefix }}-${i}"
+              (az container create \
+                --name "${{ inputs.runner_name_prefix }}-${i}" \
+                --resource-group "${{ inputs.runner_resource_group }}" \
+                --image "${{ inputs.runner_image }}" \
+                --location "${{ inputs.runner_location }}" \
+                ${vnet:+--vnet ${vnet} --subnet ${subnet}} \
+                --environment-variables \
+                  GHRUNNER_ORGANIZATION="${{ github.repository_owner }}" \
+                  GHRUNNER_LABELS="${{ inputs.runner_labels }}" \
+                  GHRUNNER_RUNNER_GROUP="${{ inputs.runner_group }}" \
+                --secure-environment-variables \
+                  GHRUNNER_REG_TOKEN="${{ steps.runner-token.outputs.result }}"
+                  result+=("${{ inputs.runner_name_prefix }}-${i}")) &
+            done
+            wait
+
+            echo '```plain' >> $GITHUB_STEP_SUMMARY
+            echo "## Created JIT Runners:" >> $GITHUB_STEP_SUMMARY
+            az container list --resource-group "${{ inputs.runner_resource_group }}" --query "[?contains(name, '${{ inputs.runner_name_prefix }}')]" --output table >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+
+      - name: Create JIT runner (VM)
+        if: ${{ inputs.runner_type == 'vm' }}
+        id: create-jit-runner-vm
+        run: |
+            echo "Creating VM JIT runner"
+            echo "Not yet implemented"
