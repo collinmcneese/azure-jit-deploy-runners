@@ -1,0 +1,89 @@
+# This is a reusable workflow that is used to build JIT runners.
+# This workflow will:
+  # Authenticate using OIDC to Azure
+  # delete a JIT runner
+  # Provide the JIT runner details back as output to the calling workflow
+name: Delete JIT Runner
+
+permissions:
+  id-token: write
+  contents: read
+
+on:
+  workflow_call:
+    inputs:
+      environment:
+        description: 'The GitHub environment to use for deployment'
+        required: false
+        type: string
+      runner_group:
+        description: 'The group of JIT runners to create'
+        required: true
+        type: string
+      runner_name_prefix:
+        description: 'The name of the JIT runner to create'
+        required: false
+        type: string
+      runner_type:
+        description: 'The type of the JIT runner to create'
+        required: false
+        default: 'container'
+        type: string
+      runner_resource_group:
+        description: 'The resource group to create the JIT runner in'
+        required: true
+        type: string
+      runner_count:
+        description: 'The number of JIT runners to delete'
+        required: false
+        default: '1'
+        type: string
+
+    secrets:
+      az_subscription_id:
+        description: 'The Azure subscription ID'
+        required: true
+      az_tenant_id:
+        description: 'The Azure tenant ID'
+        required: true
+      az_client_id:
+        description: 'The Azure client ID'
+        required: true
+
+jobs:
+  delete-jit-runner:
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    steps:
+      - name: 'Az CLI login'
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.az_client_id }}
+          tenant-id: ${{ secrets.az_tenant_id }}
+          subscription-id: ${{ secrets.az_subscription_id }}
+
+      - name: Delete JIT runner (container)
+        if: ${{ inputs.runner_type == 'container' }}
+        id: delete-jit-runner-container
+        run: |
+          echo '```plain' >> $GITHUB_STEP_SUMMARY
+          echo "## Deleting JIT Runners:" >> $GITHUB_STEP_SUMMARY
+          az container list --resource-group "${{ inputs.runner_resource_group }}" --query "[?contains(name, '${{ inputs.runner_name_prefix }}')]" --output table >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+
+          count=${{ inputs.runner_count }}
+          for ((i=0; i<=count; i++)); do
+            (az container delete \
+              --name "${{ inputs.runner_name_prefix }}-${i}" \
+              --resource-group ${{ inputs.runner_resource_group }} \
+              --yes) &
+          done
+          wait
+          az container list --resource-group "${{ inputs.runner_resource_group }}" --query "[?contains(name, '${{ inputs.runner_name_prefix }}')]" --output table
+
+      - name: Delete JIT runner (vm)
+        if: ${{ inputs.runner_type == 'container' }}
+        id: delete-jit-runner-vm
+        run: |
+          echo "Deleting JIT runner (vm)"
+          echo "Not yet implemented"
