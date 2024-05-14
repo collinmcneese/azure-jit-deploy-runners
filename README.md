@@ -2,6 +2,8 @@
 
 This repository contains reusable GitHub Actions workflows for managing Just-In-Time (JIT) runners in Azure. The workflows authenticate with Azure using OIDC, and provide the ability to create and delete JIT runners.
 
+This repository is for example reference only.
+
 - [azure-oidc-workflows](#azure-oidc-workflows)
   - [reusable-create-jit-runner.yml](#reusable-create-jit-runneryml)
     - [Inputs, Secrets, and Outputs - reusable-create-jit-runner.yml](#inputs-secrets-and-outputs---reusable-create-jit-runneryml)
