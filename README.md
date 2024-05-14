@@ -202,7 +202,8 @@ jobs:
 
   deploy:
     name: Run Deployment
-    runs-on: ${{ steps.create-jit-runner.outputs.runner_group }}
+    runs-on:
+      group: 'my-runner-group-name'
     environment: 'my-environment'
     steps:
       - name: Checkout code
