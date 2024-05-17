@@ -182,7 +182,20 @@ on:
       - main
 
 jobs:
+  set-oidc-claim:
+    permissions:
+      actions: write
+    runs-on: ubuntu-latest
+    steps:
+      - name: Update OIDC claim
+        run: |
+          gh extensions install tspascoal/gh-oidc-sub
+          gh oidc-sub set --repo ${{ github.repository }} --subs "job_workflow_ref"
+          gh oidc-sub get --repo ${{ github.repository }}
+        env:
+          GH_TOKEN: ${{ github.token }}
   create-jit-runner:
+    needs: set-oidc-claim
     uses: {owner}/{repository}/.github/workflows/reusable-create-jit-runner.yml@main
     id: create-jit-runner
     with:
@@ -230,4 +243,19 @@ jobs:
       az_client_id: ${{ secrets.AZURE_CLIENT_ID }}
       az_subscription_id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
       az_tenant_id: ${{ secrets.AZURE_TENANT_ID }}
+  
+  default-oidc-claim:
+    needs: delete-jit-runner
+    if: always()
+    permissions:
+      actions: write
+    runs-on: ubuntu-latest
+    steps:
+      - name: Update OIDC claim
+        run: |
+          gh extensions install tspascoal/gh-oidc-sub
+          gh oidc-sub use-default --repo ${{ github.repository }}
+          gh oidc-sub get --repo ${{ github.repository }}
+        env:
+          GH_TOKEN: ${{ github.token }}
 ```
