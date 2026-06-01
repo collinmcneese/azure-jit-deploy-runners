@@ -56,7 +56,7 @@ jobs:
     environment: ${{ inputs.environment }}
     steps:
       - name: 'Az CLI login'
-        uses: azure/login@v2
+        uses: azure/login@a457da9ea143d694b1b9c7c869ebb04ebe844ef5 # v2
         with:
           client-id: ${{ secrets.az_client_id }}
           tenant-id: ${{ secrets.az_tenant_id }}
